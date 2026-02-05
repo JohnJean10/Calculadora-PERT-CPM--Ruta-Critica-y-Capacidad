@@ -6,9 +6,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
 import math
+import io
 
 # --- 1. CONFIGURACIÓN Y ESTILOS ---
-st.set_page_config(page_title="Simulador PERT/CPM - RK Power", layout="wide")
+st.set_page_config(page_title="Calculadora PERT/CPM", layout="wide")
 st.markdown("""
 <style>
     .metric-card {
@@ -31,8 +32,39 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- FUNCIÓN DE EXPORTACIÓN EXCEL ---
+def generar_excel(dfs_dict):
+    """Genera un archivo Excel en memoria con múltiples hojas y formato."""
+    output = io.BytesIO()
+    writer = pd.ExcelWriter(output, engine='xlsxwriter')
+    
+    workbook = writer.book
+    header_fmt = workbook.add_format({
+        'bold': True, 'text_wrap': True, 'valign': 'top', 'fg_color': '#4F81BD', 'font_color': '#FFFFFF', 'border': 1
+    })
+    
+    for sheet_name, df in dfs_dict.items():
+        df.to_excel(writer, sheet_name=sheet_name, index=False)
+        worksheet = writer.sheets[sheet_name]
+        
+        # Ajustar ancho de columnas y aplicar formato
+        for idx, col in enumerate(df.columns):
+            series = df[col]
+            max_len =  max((
+                series.astype(str).map(len).max(),
+                len(str(col))
+            )) + 2
+            worksheet.set_column(idx, idx, max_len)
+            worksheet.write(0, idx, col, header_fmt)
+            
+    writer.close()
+    return output.getvalue()
+
 # --- 2. MOTOR LÓGICO CPM ---
 def calcular_cpm(tareas):
+# ... resto de la importacion original hasta la UI ...
+# (Mantengo el resto del codigo igual hasta la seccion de tabs, donde insertare los botones)
+
     """
     Recibe una lista de diccionarios: {'id': 'A', 'nombre': 'Proceso', 'dur': 3, 'preds': ['B']}
     Retorna un grafo con atributos calculados (ES, EF, LS, LF, Holgura).
@@ -285,11 +317,12 @@ if st.session_state.lista_tareas:
         deficit_minutos = (tiempo_cb * meta_semanal) - tiempo_semanal
         
         # 3. Mostrar KPIs
+        # 3. Mostrar KPIs
         kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-        kpi1.metric("🔴 Cuello de Botella", f"{cuello_botella_id}: {nombre_cb}", f"{tiempo_cb} {unidad}")
-        kpi2.metric("📈 Capacidad Actual", f"{capacidad_actual:.2f} uds/periodo", delta=f"{capacidad_actual - meta_semanal:.2f} vs Meta")
-        kpi3.metric("⏱️ Takt Time Meta", f"{takt_time_meta:.1f} {unidad}", "Ritmo necesario")
-        kpi4.metric("🕐 Lead Time (Ruta Crítica)", f"{t_proyecto} {unidad}")
+        kpi1.metric("🔴 Cuello Botella", f"{cuello_botella_id}", f"{tiempo_cb} {unidad[:3]}")
+        kpi2.metric("📈 Capacidad", f"{capacidad_actual:.2f} uds", delta=f"{capacidad_actual - meta_semanal:.2f} vs Meta")
+        kpi3.metric("⏱️ Takt Time", f"{takt_time_meta:.1f} {unidad[:3]}", "Meta")
+        kpi4.metric("🕐 Lead Time", f"{t_proyecto} {unidad[:3]}", "Crítico")
 
         # 4. Análisis de "What-If" (Escenarios)
         st.markdown("---")
@@ -328,8 +361,18 @@ if st.session_state.lista_tareas:
         tab1, tab2, tab3, tab4 = st.tabs(["📊 Diagrama PERT", "📅 Gantt Interactivo", "📈 Análisis WIP", "📋 Datos Crudos"])
         
         with tab1:
+            # Selector de orientación para móviles
+            col_opciones, _ = st.columns([1, 2])
+            orientacion = col_opciones.selectbox(
+                "Orientación del Diagrama 📱:", 
+                ["Horizontal (Escritorio)", "Vertical (Móvil)"],
+                index=0
+            )
+            
+            rankdir_val = 'TB' if orientacion == "Vertical (Móvil)" else 'LR'
+            
             viz = graphviz.Digraph()
-            viz.attr(rankdir='LR', splines='ortho', nodesep='0.6')
+            viz.attr(rankdir=rankdir_val, splines='ortho', nodesep='0.6')
             viz.attr('node', shape='record', style='filled', fontname="Arial", fontsize="10")
             
             for n, d in grafo.nodes(data=True):
@@ -347,6 +390,14 @@ if st.session_state.lista_tareas:
                 viz.edge(u, v, color="red" if is_crit else "gray", penwidth="2.0" if is_crit else "1.0")
                 
             st.graphviz_chart(viz, use_container_width=True)
+            
+            # Botón de Descarga Imagen
+            st.download_button(
+                label="⬇️ Descargar Imagen (PNG)", 
+                data=viz.pipe(format='png'), 
+                file_name="diagrama_pert.png", 
+                mime="image/png"
+            )
             st.caption("� Nodo Naranja: Cuello de Botella (Restricción de Capacidad) | 🔴 Borde Rojo: Ruta Crítica (Restricción de Tiempo)")
 
         with tab2:
@@ -392,7 +443,7 @@ if st.session_state.lista_tareas:
             """)
 
         with tab4:
-            st.subheader("� Tabla de Resultados Detallada")
+            st.subheader("📊 Tabla de Resultados Detallada")
             tabla_datos = []
             for n, datos in grafo.nodes(data=True):
                 tabla_datos.append({
@@ -406,6 +457,18 @@ if st.session_state.lista_tareas:
                     "Holgura": datos['Holgura'],
                     "¿Crítica?": "✅ Sí" if datos['EsCritica'] else "❌ No"
                 })
+            
+            # Botón de Descarga Excel
+            df_resultados = pd.DataFrame(tabla_datos)
+            excel_bytes = generar_excel({"Resultados": df_resultados})
+            
+            st.download_button(
+                label="📥 Descargar Tabla (Excel)",
+                data=excel_bytes,
+                file_name="resultados_proyecto.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            
             st.dataframe(tabla_datos, use_container_width=True)
     else:
         st.error(t_proyecto)

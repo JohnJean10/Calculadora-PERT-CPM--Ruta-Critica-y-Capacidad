@@ -1,6 +1,7 @@
+pandas
 streamlit
 graphviz
 networkx
-pandas
 plotly
 numpy
+xlsxwriter
