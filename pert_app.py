@@ -215,7 +215,53 @@ with st.sidebar:
 
     st.divider()
     
-    if st.button("🗑️ Reiniciar Datos", use_container_width=True):
+    # IMPORTAR ARCHIVO
+    st.subheader("📂 Importar Tareas")
+    uploaded_file = st.file_uploader("Cargar Excel o CSV", type=["xlsx", "xls", "csv"])
+    
+    if uploaded_file:
+        try:
+            if uploaded_file.name.endswith('.csv'):
+                df_import = pd.read_csv(uploaded_file)
+            else:
+                df_import = pd.read_excel(uploaded_file)
+            
+            # Normalizar columnas
+            df_import.columns = [c.strip().lower() for c in df_import.columns]
+            
+            # Mapeo flexible de columnas
+            col_id = next((c for c in df_import.columns if 'id' in c), None)
+            col_nom = next((c for c in df_import.columns if 'nom' in c or 'activ' in c), None)
+            col_dur = next((c for c in df_import.columns if 'dur' in c or 'tiemp' in c), None)
+            col_pred = next((c for c in df_import.columns if 'pred' in c or 'pre' in c), None)
+            
+            if col_id and col_dur:
+                st.success(f"Archivo cargado: {len(df_import)} tareas detectadas.")
+                if st.button("📥 Reemplazar Lista Actual", use_container_width=True):
+                    nueva_lista_import = []
+                    for _, row in df_import.iterrows():
+                        preds_val = row[col_pred] if col_pred and pd.notna(row[col_pred]) else ""
+                        preds_list = [str(p).strip().upper() for p in str(preds_val).split(',') if str(p).strip()]
+                        
+                        nueva_lista_import.append({
+                            'id': str(row[col_id]).strip().upper(),
+                            'nombre': str(row[col_nom]) if col_nom and pd.notna(row[col_nom]) else str(row[col_id]),
+                            'dur': float(row[col_dur]) if pd.notna(row[col_dur]) else 1.0,
+                            'preds': preds_list
+                        })
+                    
+                    st.session_state.lista_tareas = nueva_lista_import
+                    st.rerun()
+            else:
+                st.error("No se encontraron columnas clave (ID, Duración). Verifica tu archivo.")
+                
+        except Exception as e:
+            st.error(f"Error al leer el archivo: {e}")
+
+    st.divider()
+    
+    col_reset, _ = st.columns([1, 1])
+    if col_reset.button("🗑️ Reiniciar Datos", use_container_width=True):
         st.session_state.lista_tareas = []
         st.rerun()
 
