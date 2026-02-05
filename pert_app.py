@@ -392,12 +392,17 @@ if st.session_state.lista_tareas:
             st.graphviz_chart(viz, use_container_width=True)
             
             # Botón de Descarga Imagen
-            st.download_button(
-                label="⬇️ Descargar Imagen (PNG)", 
-                data=viz.pipe(format='png'), 
-                file_name="diagrama_pert.png", 
-                mime="image/png"
-            )
+            try:
+                png_data = viz.pipe(format='png')
+                st.download_button(
+                    label="⬇️ Descargar Imagen (PNG)", 
+                    data=png_data, 
+                    file_name="diagrama_pert.png", 
+                    mime="image/png"
+                )
+            except Exception as e:
+                st.warning("⚠️ Instala [Graphviz](https://graphviz.org/download/) en tu PC para descargar imágenes PNG.")
+                st.caption(f"Error técnico: {str(e)}")
             st.caption("� Nodo Naranja: Cuello de Botella (Restricción de Capacidad) | 🔴 Borde Rojo: Ruta Crítica (Restricción de Tiempo)")
 
         with tab2:
