@@ -240,6 +240,18 @@ with st.sidebar:
             
             st.dataframe(tabla_tareas, use_container_width=True, hide_index=True)
             
+            # Botón descargar lista
+            df_lista = pd.DataFrame(tabla_tareas)
+            excel_lista = generar_excel({"Lista de Tareas": df_lista})
+            st.download_button(
+                label="⬇️ Descargar Lista",
+                data=excel_lista,
+                file_name="lista_tareas.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                help="Descargar lista actual en Excel",
+                use_container_width=True
+            )
+            
             if st.button("✏️ Editar Lista Completa", use_container_width=True):
                 st.session_state.edit_mode = True
                 st.rerun()
