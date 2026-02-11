@@ -8,7 +8,7 @@ import io
 import copy
 
 # --- CONFIGURACIÓN INICIAL ---
-st.set_page_config(page_title="RK Power - Sistema de Planificación Multi-Modelo", layout="wide", page_icon="⚙️")
+st.set_page_config(page_title="RK Power - Sistema Multi-Modelo con Heijunka", layout="wide", page_icon="⚙️")
 
 # --- ESTILOS CSS ---
 st.markdown("""
@@ -37,92 +37,148 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- DEFINICIÓN DE RECETAS POR MODELO ---
-RECETAS_DEFAULT = {
-    "80-100KW": [
-        {'ID': 'A', 'Actividad': 'Corte Tanque + Soporteria', 'Duracion_Min': 210.0, 'Predecesores': '', 'Recurso': 'Corte Láser', 'Componente': 'Tanque'},
-        {'ID': 'B', 'Actividad': 'Corte Cabina', 'Duracion_Min': 65.0, 'Predecesores': '', 'Recurso': 'Corte Láser', 'Componente': 'Cabina'},
-        {'ID': 'C', 'Actividad': 'Corte Sist. Escape', 'Duracion_Min': 91.0, 'Predecesores': 'B', 'Recurso': 'Corte Láser', 'Componente': 'Sistema Escape'},
-        {'ID': 'D', 'Actividad': 'Corte Caja Breaker', 'Duracion_Min': 14.3, 'Predecesores': 'C', 'Recurso': 'Corte Láser', 'Componente': 'Caja Breaker'},
-        {'ID': 'E', 'Actividad': 'Plegado Tanque', 'Duracion_Min': 408.0, 'Predecesores': 'A', 'Recurso': 'Plegadora', 'Componente': 'Tanque'},
-        {'ID': 'F', 'Actividad': 'Soldadura Tanque', 'Duracion_Min': 328.2, 'Predecesores': 'E', 'Recurso': 'Soldadura', 'Componente': 'Tanque'},
-        {'ID': 'G', 'Actividad': 'Plegado Cabina', 'Duracion_Min': 510.0, 'Predecesores': 'B', 'Recurso': 'Plegadora', 'Componente': 'Cabina'},
-        {'ID': 'H', 'Actividad': 'Soldadura Cabina', 'Duracion_Min': 360.0, 'Predecesores': 'G', 'Recurso': 'Soldadura', 'Componente': 'Cabina'},
-        {'ID': 'I', 'Actividad': 'Plegado Caja', 'Duracion_Min': 45.0, 'Predecesores': 'D', 'Recurso': 'Plegadora', 'Componente': 'Caja Breaker'},
-        {'ID': 'J', 'Actividad': 'Soldadura Caja', 'Duracion_Min': 90.0, 'Predecesores': 'I', 'Recurso': 'Soldadura', 'Componente': 'Caja Breaker'},
-        {'ID': 'K', 'Actividad': 'Pintura Tanque', 'Duracion_Min': 220.0, 'Predecesores': 'F', 'Recurso': 'Pintura (Auto)', 'Componente': 'Tanque'},
-        {'ID': 'L', 'Actividad': 'Pintura Cabina', 'Duracion_Min': 545.0, 'Predecesores': 'H', 'Recurso': 'Pintura (Semi)', 'Componente': 'Cabina'},
-        {'ID': 'M', 'Actividad': 'Ensamble Mecánico', 'Duracion_Min': 160.0, 'Predecesores': 'K,L', 'Recurso': 'Ensamble', 'Componente': 'Equipo Completo'},
-        {'ID': 'N', 'Actividad': 'Ensamble Eléctrico', 'Duracion_Min': 210.0, 'Predecesores': 'M,J', 'Recurso': 'Ensamble', 'Componente': 'Equipo Completo'},
-        {'ID': 'O', 'Actividad': 'Pruebas Carga', 'Duracion_Min': 37.5, 'Predecesores': 'N', 'Recurso': 'Pruebas', 'Componente': 'Equipo Completo'},
-        {'ID': 'P', 'Actividad': 'Empaque Final', 'Duracion_Min': 15.0, 'Predecesores': 'O', 'Recurso': 'Empaque', 'Componente': 'Equipo Completo'}
-    ],
-    "125-200KW": [
-        # Tiempos ~20% más altos para modelo más grande
-        {'ID': 'A', 'Actividad': 'Corte Tanque + Soporteria', 'Duracion_Min': 252.0, 'Predecesores': '', 'Recurso': 'Corte Láser', 'Componente': 'Tanque'},
-        {'ID': 'B', 'Actividad': 'Corte Cabina', 'Duracion_Min': 78.0, 'Predecesores': '', 'Recurso': 'Corte Láser', 'Componente': 'Cabina'},
-        {'ID': 'C', 'Actividad': 'Corte Sist. Escape', 'Duracion_Min': 109.2, 'Predecesores': 'B', 'Recurso': 'Corte Láser', 'Componente': 'Sistema Escape'},
-        {'ID': 'D', 'Actividad': 'Corte Caja Breaker', 'Duracion_Min': 17.2, 'Predecesores': 'C', 'Recurso': 'Corte Láser', 'Componente': 'Caja Breaker'},
-        {'ID': 'E', 'Actividad': 'Plegado Tanque', 'Duracion_Min': 489.6, 'Predecesores': 'A', 'Recurso': 'Plegadora', 'Componente': 'Tanque'},
-        {'ID': 'F', 'Actividad': 'Soldadura Tanque', 'Duracion_Min': 393.8, 'Predecesores': 'E', 'Recurso': 'Soldadura', 'Componente': 'Tanque'},
-        {'ID': 'G', 'Actividad': 'Plegado Cabina', 'Duracion_Min': 612.0, 'Predecesores': 'B', 'Recurso': 'Plegadora', 'Componente': 'Cabina'},
-        {'ID': 'H', 'Actividad': 'Soldadura Cabina', 'Duracion_Min': 432.0, 'Predecesores': 'G', 'Recurso': 'Soldadura', 'Componente': 'Cabina'},
-        {'ID': 'I', 'Actividad': 'Plegado Caja', 'Duracion_Min': 54.0, 'Predecesores': 'D', 'Recurso': 'Plegadora', 'Componente': 'Caja Breaker'},
-        {'ID': 'J', 'Actividad': 'Soldadura Caja', 'Duracion_Min': 108.0, 'Predecesores': 'I', 'Recurso': 'Soldadura', 'Componente': 'Caja Breaker'},
-        {'ID': 'K', 'Actividad': 'Pintura Tanque', 'Duracion_Min': 264.0, 'Predecesores': 'F', 'Recurso': 'Pintura (Auto)', 'Componente': 'Tanque'},
-        {'ID': 'L', 'Actividad': 'Pintura Cabina', 'Duracion_Min': 654.0, 'Predecesores': 'H', 'Recurso': 'Pintura (Semi)', 'Componente': 'Cabina'},
-        {'ID': 'M', 'Actividad': 'Ensamble Mecánico', 'Duracion_Min': 192.0, 'Predecesores': 'K,L', 'Recurso': 'Ensamble', 'Componente': 'Equipo Completo'},
-        {'ID': 'N', 'Actividad': 'Ensamble Eléctrico', 'Duracion_Min': 252.0, 'Predecesores': 'M,J', 'Recurso': 'Ensamble', 'Componente': 'Equipo Completo'},
-        {'ID': 'O', 'Actividad': 'Pruebas Carga', 'Duracion_Min': 45.0, 'Predecesores': 'N', 'Recurso': 'Pruebas', 'Componente': 'Equipo Completo'},
-        {'ID': 'P', 'Actividad': 'Empaque Final', 'Duracion_Min': 18.0, 'Predecesores': 'O', 'Recurso': 'Empaque', 'Componente': 'Equipo Completo'}
-    ],
-    "250-500KW": [
-        # Tiempos ~50% más altos que el base
-        {'ID': 'A', 'Actividad': 'Corte Tanque + Soporteria', 'Duracion_Min': 315.0, 'Predecesores': '', 'Recurso': 'Corte Láser', 'Componente': 'Tanque'},
-        {'ID': 'B', 'Actividad': 'Corte Cabina', 'Duracion_Min': 97.5, 'Predecesores': '', 'Recurso': 'Corte Láser', 'Componente': 'Cabina'},
-        {'ID': 'C', 'Actividad': 'Corte Sist. Escape', 'Duracion_Min': 136.5, 'Predecesores': 'B', 'Recurso': 'Corte Láser', 'Componente': 'Sistema Escape'},
-        {'ID': 'D', 'Actividad': 'Corte Caja Breaker', 'Duracion_Min': 21.5, 'Predecesores': 'C', 'Recurso': 'Corte Láser', 'Componente': 'Caja Breaker'},
-        {'ID': 'E', 'Actividad': 'Plegado Tanque', 'Duracion_Min': 612.0, 'Predecesores': 'A', 'Recurso': 'Plegadora', 'Componente': 'Tanque'},
-        {'ID': 'F', 'Actividad': 'Soldadura Tanque', 'Duracion_Min': 492.3, 'Predecesores': 'E', 'Recurso': 'Soldadura', 'Componente': 'Tanque'},
-        {'ID': 'G', 'Actividad': 'Plegado Cabina', 'Duracion_Min': 765.0, 'Predecesores': 'B', 'Recurso': 'Plegadora', 'Componente': 'Cabina'},
-        {'ID': 'H', 'Actividad': 'Soldadura Cabina', 'Duracion_Min': 540.0, 'Predecesores': 'G', 'Recurso': 'Soldadura', 'Componente': 'Cabina'},
-        {'ID': 'I', 'Actividad': 'Plegado Caja', 'Duracion_Min': 67.5, 'Predecesores': 'D', 'Recurso': 'Plegadora', 'Componente': 'Caja Breaker'},
-        {'ID': 'J', 'Actividad': 'Soldadura Caja', 'Duracion_Min': 135.0, 'Predecesores': 'I', 'Recurso': 'Soldadura', 'Componente': 'Caja Breaker'},
-        {'ID': 'K', 'Actividad': 'Pintura Tanque', 'Duracion_Min': 330.0, 'Predecesores': 'F', 'Recurso': 'Pintura (Auto)', 'Componente': 'Tanque'},
-        {'ID': 'L', 'Actividad': 'Pintura Cabina', 'Duracion_Min': 817.5, 'Predecesores': 'H', 'Recurso': 'Pintura (Semi)', 'Componente': 'Cabina'},
-        {'ID': 'M', 'Actividad': 'Ensamble Mecánico', 'Duracion_Min': 240.0, 'Predecesores': 'K,L', 'Recurso': 'Ensamble', 'Componente': 'Equipo Completo'},
-        {'ID': 'N', 'Actividad': 'Ensamble Eléctrico', 'Duracion_Min': 315.0, 'Predecesores': 'M,J', 'Recurso': 'Ensamble', 'Componente': 'Equipo Completo'},
-        {'ID': 'O', 'Actividad': 'Pruebas Carga', 'Duracion_Min': 56.3, 'Predecesores': 'N', 'Recurso': 'Pruebas', 'Componente': 'Equipo Completo'},
-        {'ID': 'P', 'Actividad': 'Empaque Final', 'Duracion_Min': 22.5, 'Predecesores': 'O', 'Recurso': 'Empaque', 'Componente': 'Equipo Completo'}
-    ]
+# --- CONFIGURACIÓN DE FAMILIAS Y MODELOS ---
+FAMILIAS = {
+    "A": ["80-100KW"],
+    "B": ["130-150KW", "180-230KW"],
+    "C": ["250-275KW", "300-400KW"],
+    "D": ["500KW", "600KW"]
 }
+
+# Factores de escala respecto al modelo base (80-100KW)
+FACTORES_ESCALA = {
+    "80-100KW": 1.0,
+    "130-150KW": 1.25,
+    "180-230KW": 1.7,
+    "250-275KW": 2.0,
+    "300-400KW": 2.5,
+    "500KW": 3.5,
+    "600KW": 4.0
+}
+
+# Receta base (80-100KW)
+RECETA_BASE = [
+    {'ID': 'A', 'Actividad': 'Corte Tanque + Soporteria', 'Duracion_Min': 210.0, 'Predecesores': '', 'Recurso': 'Corte Láser', 'Componente': 'Tanque'},
+    {'ID': 'B', 'Actividad': 'Corte Cabina', 'Duracion_Min': 65.0, 'Predecesores': '', 'Recurso': 'Corte Láser', 'Componente': 'Cabina'},
+    {'ID': 'C', 'Actividad': 'Corte Sist. Escape', 'Duracion_Min': 91.0, 'Predecesores': 'B', 'Recurso': 'Corte Láser', 'Componente': 'Sistema Escape'},
+    {'ID': 'D', 'Actividad': 'Corte Caja Breaker', 'Duracion_Min': 14.3, 'Predecesores': 'C', 'Recurso': 'Corte Láser', 'Componente': 'Caja Breaker'},
+    {'ID': 'E', 'Actividad': 'Plegado Tanque', 'Duracion_Min': 408.0, 'Predecesores': 'A', 'Recurso': 'Plegadora', 'Componente': 'Tanque'},
+    {'ID': 'F', 'Actividad': 'Soldadura Tanque', 'Duracion_Min': 328.2, 'Predecesores': 'E', 'Recurso': 'Soldadura', 'Componente': 'Tanque'},
+    {'ID': 'G', 'Actividad': 'Plegado Cabina', 'Duracion_Min': 510.0, 'Predecesores': 'B', 'Recurso': 'Plegadora', 'Componente': 'Cabina'},
+    {'ID': 'H', 'Actividad': 'Soldadura Cabina', 'Duracion_Min': 360.0, 'Predecesores': 'G', 'Recurso': 'Soldadura', 'Componente': 'Cabina'},
+    {'ID': 'I', 'Actividad': 'Plegado Caja', 'Duracion_Min': 45.0, 'Predecesores': 'D', 'Recurso': 'Plegadora', 'Componente': 'Caja Breaker'},
+    {'ID': 'J', 'Actividad': 'Soldadura Caja', 'Duracion_Min': 90.0, 'Predecesores': 'I', 'Recurso': 'Soldadura', 'Componente': 'Caja Breaker'},
+    {'ID': 'K', 'Actividad': 'Pintura Tanque', 'Duracion_Min': 220.0, 'Predecesores': 'F', 'Recurso': 'Pintura (Auto)', 'Componente': 'Tanque'},
+    {'ID': 'L', 'Actividad': 'Pintura Cabina', 'Duracion_Min': 545.0, 'Predecesores': 'H', 'Recurso': 'Pintura (Semi)', 'Componente': 'Cabina'},
+    {'ID': 'M', 'Actividad': 'Ensamble Mecánico', 'Duracion_Min': 160.0, 'Predecesores': 'K,L', 'Recurso': 'Ensamble', 'Componente': 'Equipo Completo'},
+    {'ID': 'N', 'Actividad': 'Ensamble Eléctrico', 'Duracion_Min': 210.0, 'Predecesores': 'M,J', 'Recurso': 'Ensamble', 'Componente': 'Equipo Completo'},
+    {'ID': 'O', 'Actividad': 'Pruebas Carga', 'Duracion_Min': 37.5, 'Predecesores': 'N', 'Recurso': 'Pruebas', 'Componente': 'Equipo Completo'},
+    {'ID': 'P', 'Actividad': 'Empaque Final', 'Duracion_Min': 15.0, 'Predecesores': 'O', 'Recurso': 'Empaque', 'Componente': 'Equipo Completo'}
+]
+
+def generar_receta_escalada(modelo):
+    """Genera una receta escalada basada en el factor del modelo"""
+    factor = FACTORES_ESCALA.get(modelo, 1.0)
+    receta_escalada = []
+    for actividad in RECETA_BASE:
+        act_escalada = copy.deepcopy(actividad)
+        act_escalada['Duracion_Min'] = round(actividad['Duracion_Min'] * factor, 1)
+        receta_escalada.append(act_escalada)
+    return receta_escalada
+
+def crear_recetas_default():
+    """Crea todas las recetas para los modelos configurados"""
+    recetas = {}
+    for familia, modelos in FAMILIAS.items():
+        for modelo in modelos:
+            recetas[modelo] = generar_receta_escalada(modelo)
+    return recetas
+
+def get_familia_modelo(modelo):
+    """Retorna la familia a la que pertenece un modelo"""
+    for familia, modelos in FAMILIAS.items():
+        if modelo in modelos:
+            return familia
+    return "Otros"
 
 # --- GESTIÓN DE ESTADO ---
 if 'recetas' not in st.session_state:
-    st.session_state.recetas = copy.deepcopy(RECETAS_DEFAULT)
+    st.session_state.recetas = crear_recetas_default()
 
 if 'modelo_activo' not in st.session_state:
     st.session_state.modelo_activo = "80-100KW"
 
 if 'plan_produccion' not in st.session_state:
+    modelos_orden = []
+    for fam in ["A", "B", "C", "D"]:
+        if fam in FAMILIAS:
+            modelos_orden.extend(FAMILIAS[fam])
+    
     st.session_state.plan_produccion = pd.DataFrame({
-        'Modelo': list(st.session_state.recetas.keys()),
-        'Sem1': [2, 1, 0],
-        'Sem2': [3, 1, 1],
-        'Sem3': [2, 2, 0],
-        'Sem4': [1, 0, 1]
+        'Modelo': modelos_orden,
+        'Sem1': [2, 1, 0, 1, 0, 0, 0],
+        'Sem2': [3, 1, 1, 0, 1, 0, 0],
+        'Sem3': [2, 2, 0, 1, 0, 0, 0],
+        'Sem4': [1, 0, 1, 0, 0, 0, 1]
     })
 
 # --- SIDEBAR: CONFIGURACIÓN GLOBAL ---
 with st.sidebar:
     st.header("⚙️ Configuración Global")
     
-    st.subheader("📦 Modelo Activo")
-    modelo_seleccionado = st.selectbox(
-        "Selecciona modelo para editar receta:",
-        list(st.session_state.recetas.keys())
+    st.subheader("📦 Gestión de Modelos")
+    
+    # Selector de modelo agrupado por familia
+    modelos_agrupados = {}
+    for familia, modelos in FAMILIAS.items():
+        for modelo in modelos:
+            if modelo in st.session_state.recetas:
+                etiqueta = f"[Fam {familia}] {modelo}"
+                modelos_agrupados[etiqueta] = modelo
+    
+    modelo_seleccionado_label = st.selectbox(
+        "Modelo Activo:",
+        list(modelos_agrupados.keys()),
+        index=0
     )
-    st.session_state.modelo_activo = modelo_seleccionado
+    st.session_state.modelo_activo = modelos_agrupados[modelo_seleccionado_label]
+    
+    # Crear nuevo modelo
+    with st.expander("➕ Crear Nuevo Modelo"):
+        st.write("Duplica un modelo existente como plantilla")
+        
+        col_nuevo1, col_nuevo2 = st.columns(2)
+        modelo_base = col_nuevo1.selectbox("Plantilla:", list(st.session_state.recetas.keys()), key="base_nuevo")
+        nuevo_nombre = col_nuevo2.text_input("Nombre:", placeholder="XXX-YYYYW", key="nombre_nuevo")
+        
+        if st.button("✅ Crear Modelo", use_container_width=True):
+            if nuevo_nombre and nuevo_nombre not in st.session_state.recetas:
+                st.session_state.recetas[nuevo_nombre] = copy.deepcopy(st.session_state.recetas[modelo_base])
+                # Agregar al plan
+                nueva_fila = pd.DataFrame({'Modelo': [nuevo_nombre], 'Sem1': [0], 'Sem2': [0], 'Sem3': [0], 'Sem4': [0]})
+                st.session_state.plan_produccion = pd.concat([st.session_state.plan_produccion, nueva_fila], ignore_index=True)
+                st.success(f"Modelo {nuevo_nombre} creado")
+                st.rerun()
+            else:
+                st.error("Nombre vacío o ya existe")
+    
+    # Eliminar modelo
+    with st.expander("🗑️ Eliminar Modelo"):
+        modelo_eliminar = st.selectbox("Modelo a eliminar:", list(st.session_state.recetas.keys()), key="modelo_eliminar")
+        st.warning(f"⚠️ Esto eliminará {modelo_eliminar} permanentemente")
+        
+        if st.button("❌ Confirmar Eliminación", use_container_width=True):
+            if len(st.session_state.recetas) > 1:
+                del st.session_state.recetas[modelo_eliminar]
+                st.session_state.plan_produccion = st.session_state.plan_produccion[
+                    st.session_state.plan_produccion['Modelo'] != modelo_eliminar
+                ]
+                if st.session_state.modelo_activo == modelo_eliminar:
+                    st.session_state.modelo_activo = list(st.session_state.recetas.keys())[0]
+                st.success(f"{modelo_eliminar} eliminado")
+                st.rerun()
+            else:
+                st.error("Debe haber al menos 1 modelo")
     
     st.divider()
     st.subheader("⏰ Turnos y Horarios")
@@ -164,6 +220,7 @@ with st.sidebar:
 
 # --- PÁGINA PRINCIPAL ---
 st.title("🏭 RK Power: Sistema Multi-Modelo con Heijunka")
+st.caption(f"Modelos activos: {len(st.session_state.recetas)} | Familias: A, B, C, D")
 
 # TABS PRINCIPALES
 tab_editor, tab_planificacion, tab_componentes, tab_capacidad, tab_pert = st.tabs([
@@ -176,7 +233,8 @@ tab_editor, tab_planificacion, tab_componentes, tab_capacidad, tab_pert = st.tab
 
 # --- TAB 1: EDITOR DE RECETAS ---
 with tab_editor:
-    st.markdown(f"### 🛠️ Receta del Modelo: **{st.session_state.modelo_activo}**")
+    familia_activa = get_familia_modelo(st.session_state.modelo_activo)
+    st.markdown(f"### 🛠️ Familia **{familia_activa}**: {st.session_state.modelo_activo}")
     st.info("Edita los tiempos y secuencias. Los cambios afectarán solo este modelo.")
     
     df_modelo_actual = pd.DataFrame(st.session_state.recetas[st.session_state.modelo_activo])
@@ -241,7 +299,7 @@ with tab_planificacion:
             modelo = row['Modelo']
             cantidad = row['Sem1']
             
-            if cantidad > 0:
+            if cantidad > 0 and modelo in st.session_state.recetas:
                 receta = st.session_state.recetas[modelo]
                 for actividad in receta:
                     recurso = actividad['Recurso']
@@ -307,7 +365,9 @@ with tab_planificacion:
             
             st.write(f"**Total:** {total_sem1} equipos")
             st.write("**Orden de producción:**")
-            st.code(" → ".join(secuencia[:20]) + ("..." if len(secuencia) > 20 else ""))
+            # Mostrar primeros 15 con nombres cortos
+            seq_display = [m.replace("KW", "") for m in secuencia[:15]]
+            st.code(" → ".join(seq_display) + ("..." if len(secuencia) > 15 else ""))
             
             st.metric("WIP Recomendado", f"{min(3, total_sem1)} equipos", 
                      help="Máximo de equipos en proceso simultáneo")
@@ -325,7 +385,7 @@ with tab_componentes:
         modelo = row['Modelo']
         cantidad_sem1 = row['Sem1']
         
-        if cantidad_sem1 > 0:
+        if cantidad_sem1 > 0 and modelo in st.session_state.recetas:
             receta = st.session_state.recetas[modelo]
             for actividad in receta:
                 comp = actividad['Componente']
@@ -380,7 +440,8 @@ with tab_capacidad:
 
 # --- TAB 5: RED PERT (del modelo activo) ---
 with tab_pert:
-    st.markdown(f"### 🕸️ Red PERT: **{st.session_state.modelo_activo}**")
+    familia_pert = get_familia_modelo(st.session_state.modelo_activo)
+    st.markdown(f"### 🕸️ Red PERT: Familia **{familia_pert}** - {st.session_state.modelo_activo}")
     
     receta_activa = st.session_state.recetas[st.session_state.modelo_activo]
     edited_df = pd.DataFrame(receta_activa)
