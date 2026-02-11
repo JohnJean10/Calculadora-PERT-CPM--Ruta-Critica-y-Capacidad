@@ -3,6 +3,7 @@ import pandas as pd
 import networkx as nx
 import plotly.express as px
 import plotly.graph_objects as go
+import graphviz
 import io
 
 # --- CONFIGURACIÓN INICIAL ---
@@ -240,16 +241,54 @@ with tab_pert:
                 Slack[n] = LS[n] - ES[n]
                 G.nodes[n]['Critical'] = (abs(Slack[n]) < 0.001)
 
-            # --- Visualización GANTT ---
-            col_g1, col_g2 = st.columns([3, 1])
+            # --- KPIs ---
+            ruta_critica_ids = [n for n in G.nodes if G.nodes[n]['Critical']]
             
-            with col_g2:
-                st.metric("Tiempo Total de Ciclo (Lead Time)", f"{project_duration:.1f} min")
-                ruta_critica_ids = [n for n in G.nodes if G.nodes[n]['Critical']]
-                st.write("**Ruta Crítica:** " + " → ".join(ruta_critica_ids))
-
-            with col_g1:
-                # Preparar datos Gantt
+            col_k1, col_k2, col_k3 = st.columns(3)
+            col_k1.metric("🕐 Lead Time", f"{project_duration:.1f} min")
+            col_k2.metric("🔴 Tareas Críticas", f"{len(ruta_critica_ids)} de {len(G.nodes)}")
+            col_k3.metric("🛣️ Ruta Crítica", " → ".join(ruta_critica_ids))
+            
+            # --- Sub-Tabs: Red PERT + Gantt ---
+            sub_pert, sub_gantt, sub_datos = st.tabs(["🕸️ Red PERT", "📅 Gantt", "📋 Datos CPM"])
+            
+            with sub_pert:
+                # Selector de orientación
+                orientacion = st.radio("Orientación:", ["Horizontal", "Vertical (Móvil)"], horizontal=True)
+                rankdir_val = 'TB' if 'Vertical' in orientacion else 'LR'
+                
+                # Encontrar cuello de botella (tarea más larga)
+                nodos_dur = {n: G.nodes[n]['duration'] for n in G.nodes}
+                cb_id = max(nodos_dur, key=nodos_dur.get)
+                
+                viz = graphviz.Digraph()
+                viz.attr(rankdir=rankdir_val, splines='ortho', nodesep='0.6')
+                viz.attr('node', shape='record', style='filled', fontname='Arial', fontsize='10')
+                
+                for n in G.nodes:
+                    d = G.nodes[n]
+                    color = '#ffcccc' if d['Critical'] else '#f0f0f0'
+                    if n == cb_id:
+                        color = '#ffe0b2'
+                    penwidth = '3.0' if d['Critical'] else '1.0'
+                    label = f"{{ {n}: {d['desc']} | {d['duration']:.1f} min }} | {{ ES: {ES[n]:.1f} | EF: {EF[n]:.1f} }} | {{ LS: {LS[n]:.1f} | LF: {LF[n]:.1f} }}"
+                    viz.node(n, label=label, fillcolor=color, penwidth=penwidth, color='red' if d['Critical'] else 'black')
+                
+                for u, v in G.edges():
+                    is_crit = G.nodes[u]['Critical'] and G.nodes[v]['Critical']
+                    viz.edge(u, v, color='red' if is_crit else 'gray', penwidth='2.0' if is_crit else '1.0')
+                
+                st.graphviz_chart(viz, use_container_width=True)
+                st.caption("🟠 Naranja: Cuello de Botella | 🔴 Rojo: Ruta Crítica")
+                
+                # Botón descarga PNG
+                try:
+                    png_data = viz.pipe(format='png')
+                    st.download_button("⬇️ Descargar Red PERT (PNG)", data=png_data, file_name="red_pert.png", mime="image/png")
+                except Exception:
+                    st.caption("ℹ️ Instala Graphviz en tu PC para descargar PNG.")
+            
+            with sub_gantt:
                 gantt_data = []
                 for n in G.nodes:
                     gantt_data.append({
@@ -275,6 +314,18 @@ with tab_pert:
                     )
                     fig_gantt.update_layout(xaxis_title="Minutos Acumulados")
                     st.plotly_chart(fig_gantt, use_container_width=True)
+            
+            with sub_datos:
+                tabla_cpm = []
+                for n in G.nodes:
+                    tabla_cpm.append({
+                        'ID': n, 'Actividad': G.nodes[n]['desc'],
+                        'Duración': G.nodes[n]['duration'],
+                        'ES': ES[n], 'EF': EF[n], 'LS': LS[n], 'LF': LF[n],
+                        'Holgura': Slack[n],
+                        '¿Crítica?': '✅' if G.nodes[n]['Critical'] else '❌'
+                    })
+                st.dataframe(tabla_cpm, use_container_width=True, hide_index=True)
 
     except Exception as e:
         st.warning(f"Esperando datos válidos de predecesores... ({e})")
